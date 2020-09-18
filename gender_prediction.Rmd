@@ -1,0 +1,142 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+Doina Covaliu - Gender Prediction using the first name
+---
+
+  
+Install the necesarry packages (remove the comment sign before running the code)
+```{r}
+#install.packages("gender")
+suppressPackageStartupMessages(library("gender"))
+#install.packages("genderdata", repos = "https://dev.ropensci.org", type = "source")
+suppressPackageStartupMessages(library("genderdata"))
+#install.packages("dplyr")
+suppressPackageStartupMessages(library("dplyr"))
+#install.packages("stringr")
+suppressPackageStartupMessages(library("stringr"))
+#install.packages("tidyverse")
+suppressPackageStartupMessages(library("tidyverse"))
+#install.packages("magrittr")
+suppressPackageStartupMessages(library("magrittr"))
+#install.packages("DescTools")
+suppressPackageStartupMessages(library("DescTools"))
+```
+
+Read the csv file into a dataframe
+```{r}
+data_source<-read.csv("C:/Users/Doina/Desktop/Customers_and_Orders.csv",
+                      sep =",", stringsAsFactors = F)
+
+```
+
+
+```{r}
+head(data_source)
+tail(data_source)
+str(data_source)
+```
+Data cleaning -Removing words like : INTERNATIONAL, REFUNDS, DELETE, comments that were included in some of the names.
+
+```{r}
+data_source<-dplyr::mutate_if(data_source, is.character,stringr::str_replace_all,
+                              pattern="INTERNATIONAL ", replacement="")
+data_source<-dplyr::mutate_if(data_source, is.character,stringr::str_replace_all,
+                              pattern="REFUNDS ",replacement="")
+data_source<-dplyr::mutate_if(data_source, is.character,stringr::str_replace_all,
+                              pattern="DELETE ", replacement="")
+data_source<-dplyr::mutate_if(data_source, is.character,stringr::str_replace_all,
+                              pattern=" $", replacement="")
+data_source<-dplyr::mutate_if(data_source, is.character,stringr::str_replace_all,
+                              pattern="Estate of ", replacement="")
+```
+
+Remove "-" from the name
+```{r}
+data_source$First_Name<-str_replace_all(data_source$First_Name, "-","")
+
+```
+
+Remove space at the begining and the end of the name
+```{r}
+data_source$First_Name <- trimws(data_source$First_Name, which = c("both"))
+```
+
+Extract the data where the first name is a initial only,in a separate dataset.
+In this case the gender cannot be determined .
+```{r}
+incomplete_names<-subset(data_source, grepl('^[a-zA-Z]{1}$|^[a-zA-Z]{1}\\.\\b|
+^[a-zA-Z]{1}\\s{1}[A-Z]{1}\\b|^[a-zA-Z]{1}\\.\\s{1}[A-Z]{1}\\b
+|^[a-zA-Z]{1}\\.\\s{1}[A-Z]{1}\\.\\b|^[a-zA-Z]{1}\\.[A-Z]{1}\\.\\b',
+data_source$First_Name)==TRUE)
+```
+
+
+Removing the observations where the First Name is formed of initials.
+```{r}
+data_source<-subset(data_source, 
+grepl('^[a-zA-Z]{1}$|^[a-zA-Z]{1}\\b|^[a-zA-Z]{1}$|^[a-zA-Z]{1}\\.\\b|
+^[a-zA-Z]{1}\\s{1}[A-Z]{1}\\b|^[a-zA-Z]{1}\\.\\s{1}[A-Z]{1}\\b|
+^[a-zA-Z]{1}\\.\\s{1}[A-Z]{1}\\.\\b|
+^[a-zA-Z]{1}\\.[A-Z]{1}\\.\\b', data_source$First_Name)==FALSE)
+```
+
+Removing any "." from the names
+```{r}
+data_source$First_Name<-str_replace_all(data_source$First_Name, "\\.","")
+```
+
+For observation with the format: Name & Name, Name and Name the value "couple"
+will be assigned to the Gender column
+```{r}
+data_source$Gender[data_source$First_Name %like any% c("% & %","% and %")]<-"couple"
+couples<-subset(data_source, grepl("couple", data_source$Gender)==TRUE)
+```
+
+Temporary remove the couple from the dataset
+```{r}
+data_source<-subset(data_source, grepl("couple", data_source$Gender)==FALSE)
+```
+
+Remove the initial after the First Name or Before the first name
+```{r}
+data_source$First_Name<-str_replace_all(data_source$First_Name, "^[A-Z]{1}\\.\\s|^[A-Z]{1}\\s|\\s{1}[A-Z]{1}\\b$|\\s{1}[A-Z]{1}\\.\\b$|","")
+```
+
+If the First Names has 2 names remove the second name
+```{r}
+data_source$First_Name<-str_replace_all(data_source$First_Name, "\\s{1}[A-Za-z]{2,}$","")
+```
+
+Extract the unique first names from the dataset 
+```{r}
+names_unique<-unique(data_source[,1])
+```
+
+Predict gender and create a data frame of names & predicted genders
+```{r}
+predicted_names <- data.frame(gender(names_unique, method = "ssa"))
+```
+
+Assign the gender by joining the predicted_names dataset with the original dataset
+```{r}
+final_dataset<-left_join(data_source, predicted_names[,c(1,4)], by = c("First_Name" = "name"))
+sapply(final_dataset, function(x) sum(is.na(x)))
+#sapply(final_dataset2, function(x) sum(is.na(x)))
+
+
+```
+Remove the original gender column that has only n/a values and 
+save the final dataset in a new csv file
+```{r}
+final_dataset<-final_dataset[-3]
+final_dataset<-rename(final_dataset, Gender=gender)
+final<-union(final_dataset, couples)
+head(final)
+tail(final)
+#write.csv(final_dataset,"Final_dataset.csv")
+#write.csv(final,"Final.csv")
+
+```
